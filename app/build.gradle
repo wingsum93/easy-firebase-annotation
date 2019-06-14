@@ -32,6 +32,8 @@ dependencies {
     //
     compileOnly project(":annotation")
     kapt project(":processor")
+
+    implementation 'com.google.firebase:firebase-core:16.0.8'
     
     testImplementation 'junit:junit:4.12'
     androidTestImplementation 'androidx.test:runner:1.2.0'
