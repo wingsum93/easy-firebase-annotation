@@ -1,5 +1,6 @@
 package com.easy.firebaseProcessor
 
+import com.easy.firebase.EasyField
 import com.easy.firebase.SuperEasyEvent
 import com.google.auto.service.AutoService
 import com.squareup.kotlinpoet.*
@@ -13,6 +14,7 @@ import javax.lang.model.SourceVersion
 import javax.lang.model.element.Element
 import javax.lang.model.element.ElementKind
 import javax.lang.model.element.TypeElement
+import javax.lang.model.element.VariableElement
 import javax.lang.model.util.ElementFilter
 
 @AutoService(Processor::class)
@@ -28,62 +30,93 @@ class SuperEasyAnnotationProcessor : KotlinAbstractProcessor(), KotlinMetadataUt
 
     override fun process(annotations: Set<TypeElement>, roundEnv: RoundEnvironment): Boolean {
         return try {
-
-            roundEnv.getElementsAnnotatedWith(SuperEasyEvent::class.java).forEach { eachElement ->
+            val outputDir: File = checkOutputDir()
+            val targetClassElements = roundEnv.getElementsAnnotatedWith(SuperEasyEvent::class.java)
+            targetClassElements.forEach { eachElement ->
                 checkAnnotationClassType(eachElement)
-                val outputDir: File = checkOutputDir()
-                // do waht?
-                val variableAsElement = typeUtils.asElement(eachElement.asType())
-                val fieldsInArgument = ElementFilter.fieldsIn(variableAsElement.enclosedElements)
-
-                val annotationArgs = variableAsElement.getAnnotation(SuperEasyEvent::class.java)
-
-
-                //generate code
-                generateFunction(eachElement)
 
             }
+
+            //generate code
+            outputDir.mkdir()
+            takeNote { "outputDir err: $outputDir" }
+            generateFile(targetClassElements, outputDir)
             true
         } catch (e: Exception) {
-            error(e.message!!)
+            error { e.message ?: "UnKnown" }
             false
         }
 
     }
 
-    private fun generateFunction(classElement: Element) {
+    private fun generateFile(classElements: Set<Element>, outputDir: File) {
+        val builder = FileSpec.builder(generatedPackageName, generatedFileName)
+        takeNote { "classElements in: $classElements" }
 
-        val builder = FileSpec.builder("oo.eric.easy", "EricEasyUtil")
-
-        generateFunc(classElement).forEach {
-            builder.addFunction(it)
+        classElements.forEach { classElement ->
+            generateFuncForEachClass(classElement).forEach { funcSpec ->
+                builder.addFunction(funcSpec)
+                takeNote { "funcSpec +1: $funcSpec" }
+            }
         }
+
         builder.addImport("com.google.firebase.analytics", "FirebaseAnalytics")
-        builder.addImport("com.google.firebase.analytics", "FirebaseAnalytics.Param.*")
-        builder.build()
-            .writeTo(checkOutputDir())
+        val fileSpec = builder.build()
+        fileSpec.writeTo(outputDir)
+
+
     }
 
-    fun generateFunc(classElement: Element): List<FunSpec> {
+    fun generateFuncForEachClass(classElement: Element): List<FunSpec> {
+        takeNote { "class name: ${classElement.asType().asTypeName()}" }
+        println("123456")
+        val paramNameOfEvent = classElement.getAnnotation(SuperEasyEvent::class.java).name
 
         val list = mutableListOf<FunSpec>()
 
+        val fieldsInArgument = ElementFilter.fieldsIn(classElement.enclosedElements)
+        val fieldList = mutableListOf<Pair<VariableElement, EasyField>>()
+        fieldsInArgument.forEach { variableAsElement ->
+            val fieldName = variableAsElement.simpleName
+            val b = variableAsElement.asType().asTypeName()
+
+            val easyField = variableAsElement.getAnnotation(EasyField::class.java)
+            easyField ?: return@forEach
+            takeNote {
+                "This field name:$fieldName, type: $b  easyField:$easyField"
+            }
+            fieldList += variableAsElement to easyField
+        }
+
+
         val funBuilder = FunSpec.builder("logEvent")
             .addModifiers(KModifier.PUBLIC)
-            .addParameter("event", classElement.asType().asTypeName())
+            .addParameter(paramNameOfEvent, classElement.asType().asTypeName())
             .receiver(CLASS_NAME_FIREBASE_ANALAYTICS)
-
             .addStatement("val b = %T()", CLASS_NAME_BUNDLE)
-            .addStatement(
-                """
-                b.putInt(FirebaseAnalytics.Param.ITEM_ID,%L)
-                b.putString(FirebaseAnalytics.Param.ITEM_NAME,%S)""".trimIndent(),
-                1001, "Apple"
-            )
-            .addStatement(
-                "logEvent(%L,b)",
-                "FirebaseAnalytics.Event.SELECT_CONTENT" //,"FirebaseAnalytics.Event.SELECT_CONTENT"
-            )
+        takeNote { "before do field #001" }
+        fieldList.forEach { pair ->
+            val tagName = pair.second.name
+            val c = pair.first.simpleName
+//            when (pair.first.getFieldType()) {
+//                FieldType.Boolean -> {
+//                    funBuilder.addStatement("b.putBoolean($tagName,%T.%T)", paramNameOfEvent, c)
+//                }
+//                FieldType.Interger -> {
+//                    funBuilder.addStatement("b.putInt($tagName,%T.%T)", paramNameOfEvent, c)
+//                }
+//                FieldType.String -> {
+//                    funBuilder.addStatement("b.putString($tagName,%T.%T)", paramNameOfEvent, c)
+//                }
+//            }
+//            funBuilder.addStatement("b.putString(")
+        }
+        takeNote { "fieldList: $fieldList" }
+
+        funBuilder.addStatement(
+            "logEvent(%L,b)",
+            "FirebaseAnalytics.Event.SELECT_CONTENT" //,"FirebaseAnalytics.Event.SELECT_CONTENT"
+        )
 
 
         val f2B = FunSpec.builder("doYourBest")
@@ -116,7 +149,7 @@ class SuperEasyAnnotationProcessor : KotlinAbstractProcessor(), KotlinMetadataUt
 
 
         list += funBuilder.build()
-        list += f2B.build()
+//        list += f2B.build()
         return list
     }
 
@@ -148,6 +181,10 @@ class SuperEasyAnnotationProcessor : KotlinAbstractProcessor(), KotlinMetadataUt
     }
 
     companion object {
+
+        const val generatedFileName = "Eric"
+        const val generatedPackageName = "com.eric.easy"
+
         val CLASS_NAME_BUNDLE = ClassName("android.os", "Bundle")
         val CLASS_NAME_VIEW = ClassName("android.view", "View")
         val CLASS_NAME_FIREBASE_ANALAYTICS = ClassName("com.google.firebase.analytics", "FirebaseAnalytics")
