@@ -11,3 +11,7 @@ foo.bar.MyProcessor
 
 #### Library to extract meta-data from Kotlin classes
 
+##### reference **:** online articles
+[see-how-to-detect-class-info](https://willowtreeapps.com/ideas/generating-code-via-annotations-in-kotlin)
+
+
